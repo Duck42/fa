@@ -1841,7 +1841,9 @@ local function UpdateGame()
         refreshObserverList()
     end
 
-    HostUtils.RefreshButtonEnabledness()
+    if isHost then
+        HostUtils.RefreshButtonEnabledness()
+    end
     RefreshOptionDisplayData(scenarioInfo)
 
     -- Update the map background to reflect the possibly-changed map.
@@ -3583,8 +3585,6 @@ function InitLobbyComm(protocol, localPort, desiredPlayerName, localPlayerUID, n
 
                 gameInfo.PlayerOptions[data.Slot][key] = val
                 if isHost then
-                    GpgNetSend('PlayerOption', data.Slot, key, val)
-
                     -- TODO: This should be a global listener on PlayerData objects, but I'm in too
                     -- much pain to implement that listener system right now. EVIL HACK TIME
                     if key == "Ready" then
@@ -5134,25 +5134,26 @@ function InitHostUtils()
         -- @param moveFrom Slot number to move from
         -- @param moveTo Slot number to move to.
         SanityCheckSlotMovement = function(moveFrom, moveTo)
-            if gameInfo.PlayerOptions[moveTo] then
-                LOG("HostUtils.MovePlayerToEmptySlot: requested slot " .. moveTo .. " already occupied")
-                return
+            if moveFrom == moveTo then
+                LOG("HostUtils.MovePlayerToEmptySlot: Attempt to move player onto themselves")
             end
 
             if gameInfo.ClosedSlots[moveTo] then
                 LOG("HostUtils.MovePlayerToEmptySlot: requested slot " .. moveTo .. " is closed")
-                return
+                return false
             end
 
             if moveTo > numOpenSlots or moveTo < 1 then
                 LOG("HostUtils.MovePlayerToEmptySlot: requested slot " .. moveTo .. " is out of range")
-                return
+                return false
             end
 
             if moveFrom > numOpenSlots or moveFrom < 1 then
                 LOG("HostUtils.MovePlayerToEmptySlot: target slot " .. moveFrom .. " is out of range")
-                return
+                return false
             end
+
+            return true
         end,
 
         --- Move a player from one slot to another, unoccupied one. Is a no-op if the requested slot
@@ -5165,6 +5166,12 @@ function InitHostUtils()
             -- Bail out early for the stupid cases.
             if not HostUtils.SanityCheckSlotMovement(currentSlot, requestedSlot) then
                 return
+            end
+
+            -- This one's only specific to moving to an empty slot, naturally.
+            if gameInfo.PlayerOptions[requestedSlot] then
+                LOG("HostUtils.MovePlayerToEmptySlot: requested slot " .. requestedSlot .. " already occupied")
+                return false
             end
 
             gameInfo.PlayerOptions[requestedSlot] = gameInfo.PlayerOptions[currentSlot]
